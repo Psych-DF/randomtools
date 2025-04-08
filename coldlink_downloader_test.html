@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ColdLink CSV Viewer</title>
+  <style>
+    html, body {
+      background-color: #000000 !important;
+      color: #e0e0e0;
+      scrollbar-color: #333 #000;
+      scrollbar-width: thin;
+    }
+
+    a {
+      display: none !important;
+      background-color: transparent !important;
+      color: inherit !important;
+    }
+
+    html, body {
+      background-color: #000000;
+    }
+
+    body {
+      background-color: #000000;
+      color: #e0e0e0;
+    }
+    h1, h2 {
+      color: #39ff14;
+    }
+    button {
+      background-color: #1f1f1f;
+      color: #e0e0e0;
+      border: 1px solid #333;
+    }
+    button:hover {
+      background-color: #333;
+    }
+    th {
+      background-color: #1e1e1e;
+      color: #39ff14;
+    }
+    td {
+      background-color: #181818;
+    }
+    input#searchBox {
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      border: 1px solid #444;
+    }
+
+    body {
+      font-family: sans-serif;
+      padding: 40px;
+      background-color: #f9f9f9;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 12px 24px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 90%;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      background-color: #eee;
+    }
+    .pagination {
+      margin-top: 20px;
+    }
+    .pagination button {
+      padding: 8px 16px;
+      margin: 0 5px;
+    }
+    #searchBox {
+      margin: 20px;
+      padding: 10px;
+      width: 300px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Download ColdLink CSV + Paginated Viewer</h1>
+
+  <div class="button-group">
+    <button onclick="downloadCSV('eth')">Ethereum</button>
+    <button onclick="downloadCSV('sol')">Solana</button>
+  </div>
+
+  <div id="preview"></div>
+  <div id="searchContainer" style="display:none;">
+    <input type="text" id="searchBox" placeholder="Search source or linked wallet..." oninput="applySearch()" />
+  </div>
+  <div class="pagination" id="pagination"></div>
+
+  <script>
+    let previewData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const rowsPerPage = 10;
+
+    async function downloadCSV(sourceType) {
+      const apiKey = '2399816f99a0442974f78697b07a698a';
+      const url = `https://coldlinkapi.xyz/v1/coldlinks/csv?source_type=${sourceType}`;
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'x-api-key': apiKey
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status} ${response.statusText}`);
+        }
+
+        const csvText = await response.text();
+        triggerDownload(csvText, sourceType);
+        previewCSV(csvText);
+      } catch (error) {
+        alert(`Failed to download CSV: ${error.message}`);
+      }
+    }
+
+    function triggerDownload(csvText, sourceType) {
+      const blob = new Blob([csvText], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `coldlinks_${sourceType}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function previewCSV(csvText) {
+      const rows = csvText.trim().split('\n').map(row =>
+        row.split(',').map(cell => cell.replace(/^"|"$/g, ''))
+      );
+
+      const headers = rows[0];
+      const sourceIndex = headers.indexOf('source_wallet');
+      const linkedIndex = headers.indexOf('linked_wallet');
+
+      if (sourceIndex === -1 || linkedIndex === -1) {
+        document.getElementById('preview').innerHTML = '<p>Could not find source_wallet or linked_wallet columns.</p>';
+        return;
+      }
+
+      previewData = rows.slice(1).map(row => ({
+        source: row[sourceIndex],
+        linked: row[linkedIndex]
+      }));
+
+      filteredData = [...previewData];
+      currentPage = 1;
+      document.getElementById("searchContainer").style.display = "block";
+      renderTable();
+      renderPagination();
+    }
+
+    function applySearch() {
+      const query = document.getElementById('searchBox').value.toLowerCase();
+      filteredData = previewData.filter(row =>
+        row.source.toLowerCase().includes(query) || row.linked.toLowerCase().includes(query)
+      );
+      currentPage = 1;
+      renderTable();
+      renderPagination();
+    }
+
+    function renderTable() {
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageRows = filteredData.slice(start, end);
+
+      let html = '<h2>CSV Preview</h2><table><thead><tr><th>Source Wallet</th><th>Linked Wallet</th></tr></thead><tbody>';
+      pageRows.forEach(row => {
+        html += `<tr><td>${row.source}</td><td>${row.linked}</td></tr>`;
+      });
+      html += '</tbody></table>';
+
+      document.getElementById('preview').innerHTML = html;
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      let paginationHTML = '';
+
+      for (let i = 1; i <= totalPages; i++) {
+        paginationHTML += `<button onclick="goToPage(${i})"${i === currentPage ? ' style="font-weight:bold;"' : ''}>${i}</button>`;
+      }
+
+      document.getElementById('pagination').innerHTML = paginationHTML;
+    }
+
+    function goToPage(page) {
+      currentPage = page;
+      renderTable();
+      renderPagination();
+    }
+  </script>
+
+</body>
+</html>
